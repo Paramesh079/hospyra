@@ -1,0 +1,16 @@
+# LLM + LangChain
+langchain
+langchain-community
+langchain-core
+ollama
+
+# Database
+sqlalchemy
+psycopg2-binary
+
+# API
+fastapi
+uvicorn
+
+# Utilities
+python-dotenv
