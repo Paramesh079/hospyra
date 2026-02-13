@@ -7,7 +7,7 @@ llm = Ollama(
     temperature=0
 )
 
-def get_similar_items_llm(item_name: str, limit: int = 5):
+def get_similar_items_llm(item_name: str, limit: int = 120):
     with engine.connect() as conn:
 
         # 1️⃣ Get base item + category

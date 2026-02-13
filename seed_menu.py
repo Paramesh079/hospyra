@@ -1,9 +1,7 @@
 import psycopg2
-import random
-from faker import Faker
 
 # -----------------------------
-# DB CONFIG (CHANGE IF NEEDED)
+# DB CONFIG
 # -----------------------------
 DB_CONFIG = {
     "host": "localhost",
@@ -13,24 +11,39 @@ DB_CONFIG = {
     "port": 5432
 }
 
-fake = Faker()
+# -----------------------------
+# FIXED MENU (ITEM → PRICE MAP)
+# -----------------------------
+MENU_ITEMS = [
+    # Veg
+    ("Veg Burger", "Veg", 120),
+    ("Paneer Burger", "Veg", 140),
+    ("Aloo Tikki Burger", "Veg", 110),
+    ("Cheese Veg Burger", "Veg", 150),
+    ("Veg Patty Sandwich", "Veg", 100),
+    ("Veg Wrap", "Veg", 130),
+    ("Veg Sandwich", "Veg", 100),
+    ("Paneer Pizza", "Veg", 220),
+    ("Veg Biryani", "Veg", 180),
+    ("Paneer Tikka", "Veg", 240),
+    ("Veg Pasta", "Veg", 200),
 
-CATEGORIES = ["Veg", "Non-Veg", "Beverages"]
+    # Non-Veg
+    ("Chicken Burger", "Non-Veg", 180),
+    ("Chicken Pizza", "Non-Veg", 260),
+    ("Chicken Biryani", "Non-Veg", 230),
+    ("Mutton Curry", "Non-Veg", 350),
+    ("Fish Fry", "Non-Veg", 300),
+    ("Chicken Pasta", "Non-Veg", 280),
 
-FOOD_ITEMS = {
-    "Veg": [
-        "Veg Burger", "Paneer Pizza", "Veg Biryani",
-        "Veg Sandwich", "Paneer Tikka", "Veg Pasta"
-    ],
-    "Non-Veg": [
-        "Chicken Burger", "Chicken Pizza", "Chicken Biryani",
-        "Mutton Curry", "Fish Fry", "Chicken Pasta"
-    ],
-    "Beverages": [
-        "Coca Cola", "Orange Juice", "Cold Coffee",
-        "Lemonade", "Milk Shake", "Green Tea"
-    ]
-}
+    # Beverages
+    ("Coca Cola", "Beverages", 80),
+    ("Orange Juice", "Beverages", 120),
+    ("Cold Coffee", "Beverages", 150),
+    ("Lemonade", "Beverages", 70),
+    ("Milk Shake", "Beverages", 160),
+    ("Green Tea", "Beverages", 90),
+]
 
 # -----------------------------
 # CONNECT TO POSTGRES
@@ -39,43 +52,33 @@ conn = psycopg2.connect(**DB_CONFIG)
 cur = conn.cursor()
 
 # -----------------------------
-# CREATE TABLE
+# RESET TABLE
 # -----------------------------
+cur.execute("DROP TABLE IF EXISTS menu;")
+
 cur.execute("""
-CREATE TABLE IF NOT EXISTS menu (
-    itemid INT PRIMARY KEY,
+CREATE TABLE menu (
+    id SERIAL PRIMARY KEY,
     item TEXT NOT NULL,
-    restaurant TEXT NOT NULL,
     category TEXT NOT NULL,
-    price NUMERIC NOT NULL
+    price NUMERIC NOT NULL,
+    UNIQUE (item)
 );
 """)
 
 conn.commit()
 
 # -----------------------------
-# GENERATE & INSERT DATA
+# INSERT FIXED DATA
 # -----------------------------
-records = []
+cur.executemany(
+    "INSERT INTO menu (item, category, price) VALUES (%s, %s, %s);",
+    MENU_ITEMS
+)
 
-for itemid in range(1, 1001):
-    category = random.choice(CATEGORIES)
-    item = random.choice(FOOD_ITEMS[category])
-    restaurant = fake.company()
-    price = round(random.uniform(50, 500), 2)
-
-    records.append((itemid, item, restaurant, category, price))
-
-insert_query = """
-INSERT INTO menu (itemid, item, restaurant, category, price)
-VALUES (%s, %s, %s, %s, %s)
-ON CONFLICT (itemid) DO NOTHING;
-"""
-
-cur.executemany(insert_query, records)
 conn.commit()
 
-print("✅ 1000 menu records inserted successfully")
+print("✅ Menu table created with FIXED prices per item")
 
 # -----------------------------
 # CLEANUP
