@@ -1,15 +1,21 @@
+import os
 import json
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import create_sql_agent
 from langchain_ollama import OllamaLLM
 from langchain_core.output_parsers import JsonOutputParser
+from dotenv import load_dotenv
 from db import engine
 
+load_dotenv()
+
 # LLM
-print("[LOG] Initializing Ollama LLM with model: ministral-3:3b")
+model_name = os.getenv("OLLAMA_MODEL", "ministral-3:3b")
+temperature = float(os.getenv("OLLAMA_TEMPERATURE", "0"))
+print(f"[LOG] Initializing Ollama LLM with model: {model_name}")
 llm = OllamaLLM(
-    model="ministral-3:3b",
-    temperature=0
+    model=model_name,
+    temperature=temperature
 )
 print("[LOG] LLM initialized successfully")
 
@@ -17,7 +23,7 @@ print("[LOG] LLM initialized successfully")
 print("[LOG] Connecting to database...")
 db = SQLDatabase(
     engine,
-    include_tables=["menu"]
+    include_tables=["samsgriddle_menu"]
 )
 print("[LOG] Database connected successfully")
 print(f"[LOG] Available tables: {db.get_usable_table_names()}")
@@ -66,29 +72,52 @@ def sql_query_menu(user_prompt: str):
     system_prompt = """You are a LangChain SQL Agent optimized for ministral-3b.
 
 DATABASE SCHEMA:
-Table: menu
-Columns: item, category, price
+Table: samsgriddle_menu
+Columns: 
+- id (SERIAL PRIMARY KEY)
+- item_category (VARCHAR) - Values: 'Vegetarian', 'Vegan', 'Non-Vegetarian', 'Beverage'
+- item_name (TEXT) - Name of the food item
+- item_price (INTEGER) - Price in rupees
+- item_taste (VARCHAR) - Values: 'Spicy', 'Sweet', 'Mild', 'Savory'
+- item_quantity (VARCHAR) - Values: 'Light', 'Medium', 'Heavy'
+- item_special (VARCHAR) - Values: 'Chef Special', 'Premium', 'Refreshing', 'Bestseller', 'Regular'
+- created_at (TIMESTAMP)
 
 CRITICAL RULES FOR MINISTRAL-3B:
 1. ALWAYS add LIMIT 23 and OFFSET 0 to queries
 2. ALWAYS use SELECT DISTINCT when querying
-3. ALWAYS add ORDER BY clause (ORDER BY item)
+3. ALWAYS add ORDER BY clause (ORDER BY item_name)
 4. Return ONLY valid JSON after "Final Answer:"
 5. NO explanations, markdown, or analysis
+6. Use column names: item_category, item_name, item_price (not category, item, price)
 
+CUSTOMER PREFERENCE SUPPORT:
+If the user provides a CUSTOMER ID (e.g., "customer 10", or JUST A NUMBER like "1"):
+- If the input is ONLY a number (e.g., "1"), treat it as "recommend for customer_id 1".
+- Use a SELF-JOIN to find items matching the customer's preference (category & taste)
+- SQL Pattern:
+  SELECT DISTINCT T1.item_name, T1.item_category, T1.item_price, T1.item_taste, T1.item_special, T1.customer_id
+  FROM samsgriddle_menu AS T1
+  JOIN samsgriddle_menu AS T2 ON T2.customer_id = [CUSTOMER_ID]
+  WHERE T1.item_category = T2.item_category 
+  AND T1.item_taste = T2.item_taste
+  AND (T1.customer_id != 1 OR T2.customer_id = 1) -- PRIVACY RULE: Exclude Customer 1 items unless the user IS Customer 1
+  ORDER BY 
+    CASE WHEN T1.customer_id = [CUSTOMER_ID] THEN 0 ELSE 1 END,
+    T1.item_name
+  LIMIT 23 OFFSET 0;
 
-
-QUERY TEMPLATE:
-SELECT DISTINCT item, category, price
-FROM menu
+QUERY TEMPLATE (General):
+SELECT DISTINCT item_name, item_category, item_price, item_taste, item_special, customer_id
+FROM samsgriddle_menu
 WHERE [condition]
-ORDER BY item
+ORDER BY item_name
 LIMIT 23 OFFSET 0;
 
 RESPONSE FORMAT (MANDATORY):
 Final Answer:
 [
-  {"item": "string", "category": "string", "price": number}
+  {"item_name": "string", "item_category": "string", "item_price": number, "item_taste": "string", "item_special": "string", "customer_id": number}
 ]"""
 
     print(f"[LOG] System prompt loaded")

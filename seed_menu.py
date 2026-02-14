@@ -54,10 +54,10 @@ cur = conn.cursor()
 # -----------------------------
 # RESET TABLE
 # -----------------------------
-cur.execute("DROP TABLE IF EXISTS menu;")
+cur.execute("DROP TABLE IF EXISTS samsgriddle_menu;")
 
 cur.execute("""
-CREATE TABLE menu (
+CREATE TABLE samsgriddle_menu (
     id SERIAL PRIMARY KEY,
     item TEXT NOT NULL,
     category TEXT NOT NULL,
@@ -72,7 +72,7 @@ conn.commit()
 # INSERT FIXED DATA
 # -----------------------------
 cur.executemany(
-    "INSERT INTO menu (item, category, price) VALUES (%s, %s, %s);",
+    "INSERT INTO samsgriddle_menu (item, category, price) VALUES (%s, %s, %s);",
     MENU_ITEMS
 )
 

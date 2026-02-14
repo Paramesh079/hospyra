@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from sql_agent import query_menu
 
 from sql_query_agent import  sql_query_menu
-from suggestions import get_similar_items_llm
+
 
 app = FastAPI()
 
