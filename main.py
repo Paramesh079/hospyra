@@ -1,10 +1,10 @@
 from fastapi import FastAPI, HTTPException
-from sql_agent import query_menu
+from sql_agent import query_menu, semantic_search_similar_items
 
 from sql_query_agent import  sql_query_menu
 
 
-app = FastAPI()
+app = FastAPI(name="hospyra", version="1.0.0", title="ai_menu_recommender", description="AI Menu Recommender for Hospyra")
 
 # @app.post("/query")
 # def run_query(prompt: str):
@@ -22,9 +22,9 @@ app = FastAPI()
 
 #     return result
 
-@app.post("/recommend")
-def run_query(prompt: str):
+@app.get("/recommend",tags=["ai-menu"])
+async def run_query(prompt: str):
     return {
         "prompt": prompt,
-        "result": query_menu(prompt)
+        "result": semantic_search_similar_items(prompt)
     }

@@ -23,7 +23,7 @@ print("[LOG] LLM initialized successfully")
 print("[LOG] Connecting to database...")
 db = SQLDatabase(
     engine,
-    include_tables=["samsgriddle_menu"]
+    include_tables=["menu_items", "menu_categories", "orders", "order_items", "users"]
 )
 print("[LOG] Database connected successfully")
 print(f"[LOG] Available tables: {db.get_usable_table_names()}")
@@ -72,52 +72,79 @@ def sql_query_menu(user_prompt: str):
     system_prompt = """You are a LangChain SQL Agent optimized for ministral-3b.
 
 DATABASE SCHEMA:
-Table: samsgriddle_menu
-Columns: 
-- id (SERIAL PRIMARY KEY)
-- item_category (VARCHAR) - Values: 'Vegetarian', 'Vegan', 'Non-Vegetarian', 'Beverage'
-- item_name (TEXT) - Name of the food item
-- item_price (INTEGER) - Price in rupees
-- item_taste (VARCHAR) - Values: 'Spicy', 'Sweet', 'Mild', 'Savory'
-- item_quantity (VARCHAR) - Values: 'Light', 'Medium', 'Heavy'
-- item_special (VARCHAR) - Values: 'Chef Special', 'Premium', 'Refreshing', 'Bestseller', 'Regular'
-- created_at (TIMESTAMP)
+Table: menu_items
+- id (INTEGER PRIMARY KEY)
+- category_id (INTEGER) - Foreign Key to menu_categories.id
+- name (VARCHAR) - Name of the food item
+- description (TEXT)
+- price (NUMERIC)
+- is_vegetarian (BOOLEAN)
+- is_vegan (BOOLEAN)
+- spice_level (INTEGER) - 0 (mild) to 5 (very spicy)
+
+Table: menu_categories
+- id (INTEGER PRIMARY KEY)
+- name (VARCHAR) - Category name (e.g., 'Starters', 'Main Course', 'Beverages')
+
+Table: orders
+- id (INTEGER PRIMARY KEY)
+- user_id (INTEGER) - Foreign Key to users.id
+- status (VARCHAR) - (e.g., 'PENDING', 'COMPLETED')
+
+Table: order_items
+- id (INTEGER PRIMARY KEY)
+- order_id (INTEGER) - Foreign Key to orders.id
+- menu_item_id (INTEGER) - Foreign Key to menu_items.id
+- price (NUMERIC)
+
+Table: users
+- id (INTEGER PRIMARY KEY)
+- name (VARCHAR)
 
 CRITICAL RULES FOR MINISTRAL-3B:
 1. ALWAYS add LIMIT 23 and OFFSET 0 to queries
 2. ALWAYS use SELECT DISTINCT when querying
-3. ALWAYS add ORDER BY clause (ORDER BY item_name)
+3. ALWAYS add ORDER BY clause (ORDER BY mi.name)
 4. Return ONLY valid JSON after "Final Answer:"
 5. NO explanations, markdown, or analysis
-6. Use column names: item_category, item_name, item_price (not category, item, price)
+6. Use correct table and column names: menu_items, menu_categories, etc.
 
 CUSTOMER PREFERENCE SUPPORT:
-If the user provides a CUSTOMER ID (e.g., "customer 10", or JUST A NUMBER like "1"):
-- If the input is ONLY a number (e.g., "1"), treat it as "recommend for customer_id 1".
-- Use a SELF-JOIN to find items matching the customer's preference (category & taste)
-- SQL Pattern:
-  SELECT DISTINCT T1.item_name, T1.item_category, T1.item_price, T1.item_taste, T1.item_special, T1.customer_id
-  FROM samsgriddle_menu AS T1
-  JOIN samsgriddle_menu AS T2 ON T2.customer_id = [CUSTOMER_ID]
-  WHERE T1.item_category = T2.item_category 
-  AND T1.item_taste = T2.item_taste
-  AND (T1.customer_id != 1 OR T2.customer_id = 1) -- PRIVACY RULE: Exclude Customer 1 items unless the user IS Customer 1
-  ORDER BY 
-    CASE WHEN T1.customer_id = [CUSTOMER_ID] THEN 0 ELSE 1 END,
-    T1.item_name
+If the user provides a CUSTOMER/USER ID (e.g., "customer 10" or just "1"):
+- Join menu_items, menu_categories, orders, and order_items to find user's history.
+- Match items based on:
+  1. CATEGORY: Same category as recently ordered items.
+  2. SPICE LEVEL: Same spice level as ordered items.
+  3. DESCRIPTION/NAME: Similar keywords in name or description.
+- SQL Example:
+  WITH last_ordered AS (
+      SELECT mi.category_id, mi.spice_level, mi.name 
+      FROM menu_items mi 
+      JOIN order_items oi ON mi.id = oi.menu_item_id 
+      JOIN orders o ON oi.order_id = o.id 
+      WHERE o.user_id = [USER_ID] 
+      ORDER BY o.created_at DESC LIMIT 5
+  )
+  SELECT DISTINCT mi.name, mc.name as category, mi.price
+  FROM menu_items AS mi
+  JOIN menu_categories AS mc ON mi.category_id = mc.id
+  WHERE (mi.category_id IN (SELECT category_id FROM last_ordered) OR mi.spice_level IN (SELECT spice_level FROM last_ordered))
+  AND mi.id NOT IN (SELECT menu_item_id FROM order_items oi2 JOIN orders o2 ON oi2.order_id = o2.id WHERE o2.user_id = [USER_ID])
+  ORDER BY mi.name
   LIMIT 23 OFFSET 0;
 
-QUERY TEMPLATE (General):
-SELECT DISTINCT item_name, item_category, item_price, item_taste, item_special, customer_id
-FROM samsgriddle_menu
-WHERE [condition]
-ORDER BY item_name
+QUERY TEMPLATE (General Search):
+SELECT DISTINCT mi.name, mc.name as category, mi.price, mi.description, mi.spice_level
+FROM menu_items AS mi
+JOIN menu_categories AS mc ON mi.category_id = mc.id
+WHERE mi.name ILIKE '%[query]%' OR mi.description ILIKE '%[query]%'
+ORDER BY mi.name
 LIMIT 23 OFFSET 0;
 
 RESPONSE FORMAT (MANDATORY):
 Final Answer:
 [
-  {"item_name": "string", "item_category": "string", "item_price": number, "item_taste": "string", "item_special": "string", "customer_id": number}
+  {"name": "string", "category": "string", "price": number}
 ]"""
 
     print(f"[LOG] System prompt loaded")
